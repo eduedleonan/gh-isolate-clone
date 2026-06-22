@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Desactivamos momentáneamente 'e' y 'pipefail' en la detección para evitar cierres agresivos por red
+set -u
 
 echo "===================================================="
 echo "🌍 GH-UNIVERSAL-ORCHESTRATOR: CONFIGURAR O CLONAR"
@@ -9,38 +10,39 @@ echo "===================================================="
 echo "🔍 Detectando identidad en GitHub..."
 DETECTED_USER=""
 
-# Ponemos '|| true' para que set -e no rompa el script aquí
-SSH_REPLY=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 || true)
+# Forzamos a SSH a ignorar el tty interactivo y capturamos solo el texto
+SSH_REPLY=$(ssh -T -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new git@github.com 2>&1)
 
 if [[ "$SSH_REPLY" =~ Hi[[:space:]]([^!]+)! ]]; then
     DETECTED_USER="${BASH_REMATCH[1]}"
     echo "✅ Identidad detectada: $DETECTED_USER"
 else
-    echo "⚠️  No se pudo auto-detectar el usuario (¿ssh-agent apagado?)."
+    echo "⚠️  No se pudo auto-detectar el usuario en este equipo."
 fi
 
-# El resto del script sigue EXACTAMENTE IGUAL...
-# --------------------------------------------------------
-# Solicitar Usuario (Nunca vacío)
+# Ahora que pasamos la red, activamos el modo estricto de seguridad para el resto del script
+set -eo pipefail
+
+# 2. Solicitar Usuario (Nunca vacío)
 if [ -n "$DETECTED_USER" ]; then
-    read -p "👤 Usuario de GitHub [$DETECTED_USER]: " GH_USER
+    read -p "👤 Usuario de GitHub [$DETECTED_USER]: " GH_USER </dev/tty
     GH_USER="${GH_USER:-$DETECTED_USER}"
 else
-    read -p "👤 Usuario de GitHub: " GH_USER
+    read -p "👤 Usuario de GitHub: " GH_USER </dev/tty
     while [ -z "$GH_USER" ]; do
-        read -p "❌ El usuario no puede estar vacío: " GH_USER
+        read -p "❌ El usuario no puede estar vacío: " GH_USER </dev/tty
     done
 fi
 
-# 2. DETECCIÓN DE ENTORNO
+# 3. DETECCIÓN DE ENTORNO
 CANT_ARCHIVOS=$(find . -maxdepth 1 ! -name "." | wc -l)
 
 if [ "$CANT_ARCHIVOS" -eq 0 ]; then
     echo "----------------------------------------------------"
     echo "✨ DETECTADO: Carpeta limpia. Activando MODO CLONACIÓN."
     echo "----------------------------------------------------"
-    read -p "📦 Nombre del repositorio remoto a descargar: " REPO_NAME
-    while [ -z "$REPO_NAME" ]; do read -p "❌ El nombre no puede estar vacío: " REPO_NAME; done
+    read -p "📦 Nombre del repositorio remoto a descargar: " REPO_NAME </dev/tty
+    while [ -z "$REPO_NAME" ]; do read -p "❌ El nombre no puede estar vacío: " REPO_NAME </dev/tty; done
     
     URL_REMOTA="git@github.com:${GH_USER}/${REPO_NAME}.git"
     echo "⚡ Validando acceso al repositorio remoto..."
@@ -57,8 +59,8 @@ else
     echo "----------------------------------------------------"
     echo "📦 DETECTADO: Carpeta con archivos. Activando MODO RECONSTRUCCIÓN."
     echo "----------------------------------------------------"
-    read -p "📦 Nombre del repositorio en GitHub: " REPO_NAME
-    while [ -z "$REPO_NAME" ]; do read -p "❌ El nombre no puede estar vacío: " REPO_NAME; done
+    read -p "📦 Nombre del repositorio en GitHub: " REPO_NAME </dev/tty
+    while [ -z "$REPO_NAME" ]; do read -p "❌ El nombre no puede estar vacío: " REPO_NAME </dev/tty; done
 
     URL_REMOTA="git@github.com:${GH_USER}/${REPO_NAME}.git"
     echo "⚡ Validando existencia en GitHub..."
